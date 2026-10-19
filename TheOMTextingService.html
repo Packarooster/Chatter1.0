@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatter - Texting Service</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
+        .hidden { display: none !important; }
+        /* Custom scrollbar for chat */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        
+        #loading { position: fixed; inset: 0; background: rgba(255, 255, 255, 0.9); display: flex; justify-content: center; align-items: center; z-index: 50; }
+        .chat-bubble-sent { background-color: #3b82f6; color: white; border-radius: 1rem 1rem 0 1rem; align-self: flex-end; }
+        .chat-bubble-received { background-color: #e2e8f0; color: #1e293b; border-radius: 1rem 1rem 1rem 0; align-self: flex-start; }
+    </style>
+</head>
+<body class="h-screen flex items-center justify-center bg-slate-100 p-4">
+
+    <!-- Loading Overlay -->
+    <div id="loading">
+        <h2 class="text-2xl font-bold text-blue-500 animate-pulse">Connecting...</h2>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="bg-white p-8 rounded-xl shadow-lg text-center w-full max-w-sm hidden">
+        <div class="mb-6 text-blue-500">
+            <svg class="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+        </div>
+        <h1 class="text-2xl font-bold text-slate-800 mb-6">Join Chatter</h1>
+        <input type="text" id="usernameInput" placeholder="Enter your username" class="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 bg-slate-50">
+        <button onclick="login()" class="w-full bg-blue-500 text-white font-bold py-3 rounded-lg hover:bg-blue-600 transition">Start Texting</button>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="appContainer" class="hidden w-full max-w-4xl h-full max-h-[800px] bg-white rounded-xl shadow-xl flex overflow-hidden border border-slate-200">
+        
+        <!-- Left Sidebar: Contacts -->
+        <div class="w-1/3 bg-slate-50 border-r border-slate-200 flex flex-col">
+            <div class="p-4 bg-white border-b border-slate-200 flex justify-between items-center">
+                <h2 class="font-bold text-lg text-slate-800">Messages</h2>
+                <div class="flex items-center gap-2">
+                    <span id="currentUserDisplay" class="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded-full"></span>
+                    <button onclick="logout()" class="text-xs text-red-500 hover:text-red-700 font-bold">Log out</button>
+                </div>
+            </div>
+            
+            <div class="p-2 border-b border-slate-200">
+                <button onclick="forceRefresh()" class="w-full text-xs text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1 py-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    Refresh Inbox
+                </button>
+            </div>
+
+            <div id="contactsList" class="flex-1 overflow-y-auto">
+                <!-- Contacts load here -->
+            </div>
+        </div>
+
+        <!-- Right Side: Chat Window -->
+        <div class="w-2/3 flex flex-col bg-white">
+            
+            <!-- Default Empty State -->
+            <div id="emptyChatState" class="flex-1 flex flex-col items-center justify-center text-slate-400">
+                <svg class="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"></path></svg>
+                <p>Select a contact to start texting</p>
+            </div>
+
+            <!-- Active Chat State -->
+            <div id="activeChatState" class="hidden flex-1 flex flex-col h-full">
+                <!-- Chat Header -->
+                <div class="px-6 py-4 border-b border-slate-200 bg-white flex justify-between items-center">
+                    <h3 class="font-bold text-lg text-slate-800" id="chattingWithDisplay">Contact Name</h3>
+                </div>
+
+                <!-- Messages Area -->
+                <div id="messagesArea" class="flex-1 overflow-y-auto p-6 flex flex-col gap-3 bg-slate-50">
+                    <!-- Chat bubbles load here -->
+                </div>
+
+                <!-- Input Area -->
+                <div class="p-4 bg-white border-t border-slate-200">
+                    <div class="flex gap-2">
+                        <input type="text" id="messageInput" placeholder="Type a message..." class="flex-1 px-4 py-2 border border-slate-300 rounded-full focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" onkeypress="handleEnter(event)">
+                        <button onclick="sendMessage()" class="bg-blue-500 text-white rounded-full p-2 w-10 h-10 flex items-center justify-center hover:bg-blue-600 transition">
+                            <svg class="w-5 h-5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- JSONBIN CONFIGURATION ---
+        const BIN_ID = '6ad69a8affd5d160537a4412'; 
+        const API_KEY = '$2a$10$r2UU8R5e3Qghy5Gll6PfhOaBoDlESuDLPIHIqLDy49uLM1O3AU/G.'; 
+        
+        // Data Structure: { users: ["Alice", "Bob"], messages: [ {from, to, text, time} ] }
+        let state = { users: [], messages: [] };
+        let currentUser = null;
+        let activeContact = null;
+        let refreshTimer = null;
+
+        // --- Database Functions ---
+        async function fetchState() {
+            try {
+                const response = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+                    headers: { 'X-Master-Key': API_KEY }
+                });
+                const data = await response.json();
+                if (data.record) {
+                    state = data.record;
+                    if (!state.users) state.users = [];
+                    if (!state.messages) state.messages = [];
+                }
+            } catch (error) {
+                console.error("Error fetching data:", error);
+            }
+            
+            document.getElementById('loading').classList.add('hidden');
+            
+            if (!currentUser) {
+                document.getElementById('loginScreen').classList.remove('hidden');
+            } else {
+                updateUI();
+            }
+        }
+
+        async function saveState() {
+            try {
+                await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': API_KEY
+                    },
+                    body: JSON.stringify(state)
+                });
+            } catch (error) {
+                console.error("Error saving data:", error);
+            }
+        }
+
+        async function forceRefresh() {
+            document.getElementById('loading').classList.remove('hidden');
+            await fetchState();
+        }
+
+        // --- Auth ---
+        async function login() {
+            const name = document.getElementById('usernameInput').value.trim();
+            if (!name) return;
+            
+            document.getElementById('loading').classList.remove('hidden');
+            await fetchState(); // ensure we have latest before adding
+            
+            if (!state.users.includes(name)) {
+                state.users.push(name);
+                await saveState();
+            }
+            
+            currentUser = name;
+            document.getElementById('currentUserDisplay').innerText = currentUser;
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('appContainer').classList.remove('hidden');
+            
+            updateUI();
+            
+            // Auto-refresh messages every 10 seconds
+            refreshTimer = setInterval(fetchState, 10000);
+        }
+
+        function logout() {
+            currentUser = null;
+            activeContact = null;
+            clearInterval(refreshTimer);
+            document.getElementById('appContainer').classList.add('hidden');
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('usernameInput').value = '';
+            document.getElementById('activeChatState').classList.add('hidden');
+            document.getElementById('emptyChatState').classList.remove('hidden');
+        }
+
+        // --- UI & Chat Functions ---
+        function updateUI() {
+            renderContacts();
+            if (activeContact) {
+                renderMessages();
+            }
+        }
+
+        function renderContacts() {
+            const list = document.getElementById('contactsList');
+            list.innerHTML = '';
+            
+            // Filter out the current user from the list
+            const otherUsers = state.users.filter(u => u !== currentUser);
+            
+            if (otherUsers.length === 0) {
+                list.innerHTML = '<p class="p-4 text-sm text-slate-400 text-center">No other users registered yet.</p>';
+                return;
+            }
+
+            otherUsers.forEach(user => {
+                const isActive = user === activeContact;
+                const bgClass = isActive ? 'bg-blue-50 border-l-4 border-blue-500' : 'bg-white hover:bg-slate-50 border-l-4 border-transparent border-b border-slate-100';
+                
+                // Count unread (just looking at messages directed to us from them that we haven't read - simple version)
+                // For a simple version, we'll just show the name.
+                
+                list.innerHTML += `
+                    <div onclick="selectContact('${user}')" class="p-4 cursor-pointer transition flex items-center gap-3 ${bgClass}">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg">
+                            ${user.charAt(0).toUpperCase()}
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="font-bold text-slate-800">${user}</h3>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function selectContact(user) {
+            activeContact = user;
+            document.getElementById('chattingWithDisplay').innerText = user;
+            document.getElementById('emptyChatState').classList.add('hidden');
+            document.getElementById('activeChatState').classList.remove('hidden');
+            
+            renderContacts(); // Re-render to show active selection
+            renderMessages();
+            
+            // Focus input
+            document.getElementById('messageInput').focus();
+        }
+
+        function renderMessages() {
+            const area = document.getElementById('messagesArea');
+            area.innerHTML = '';
+            
+            if (!state.messages) state.messages = [];
+
+            // Filter messages between currentUser and activeContact
+            const chatHistory = state.messages.filter(m => 
+                (m.from === currentUser && m.to === activeContact) || 
+                (m.from === activeContact && m.to === currentUser)
+            );
+
+            if (chatHistory.length === 0) {
+                area.innerHTML = '<p class="text-center text-slate-400 text-sm mt-10">This is the beginning of your chat history.</p>';
+                return;
+            }
+
+            chatHistory.forEach(msg => {
+                const isMine = msg.from === currentUser;
+                const bubbleClass = isMine ? 'chat-bubble-sent' : 'chat-bubble-received';
+                const alignment = isMine ? 'items-end' : 'items-start';
+                
+                area.innerHTML += `
+                    <div class="flex flex-col ${alignment} max-w-[80%] ${isMine ? 'self-end' : 'self-start'}">
+                        <div class="px-4 py-2 shadow-sm ${bubbleClass}">
+                            <p class="text-sm">${msg.text}</p>
+                        </div>
+                        <span class="text-[10px] text-slate-400 mt-1 px-1">${msg.time}</span>
+                    </div>
+                `;
+            });
+
+            // Scroll to bottom
+            area.scrollTop = area.scrollHeight;
+        }
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            if (!activeContact) return;
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            // Optimistic UI update (show immediately)
+            const newMessage = {
+                from: currentUser,
+                to: activeContact,
+                text: text,
+                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+            };
+            
+            state.messages.push(newMessage);
+            input.value = '';
+            renderMessages();
+
+            // Save to database
+            await saveState();
+        }
+
+        // Init
+        fetchState();
+    </script>
+</body>
+</html>
